@@ -11,8 +11,7 @@ const Modal = (function() {
         form: null,
         title: null,
         deleteBtn: null,
-        closeBtn: null,
-        cancelBtn: null
+        closeBtn: null
     };
 
     /**
@@ -25,12 +24,10 @@ const Modal = (function() {
         elements.title = document.getElementById('modalTitle');
         elements.deleteBtn = document.getElementById('deleteEventBtn');
         elements.closeBtn = document.getElementById('closeModal');
-        elements.cancelBtn = document.getElementById('cancelBtn');
 
         // Event listeners
         elements.overlay.addEventListener('click', close);
         elements.closeBtn.addEventListener('click', close);
-        elements.cancelBtn.addEventListener('click', close);
         elements.deleteBtn.addEventListener('click', handleDelete);
         elements.form.addEventListener('submit', handleSubmit);
 

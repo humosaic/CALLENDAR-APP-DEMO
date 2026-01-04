@@ -1,5 +1,5 @@
 /**
- * Calendar Module - Calendar grid rendering and navigation
+ * Calendar Module - Google Calendar style rendering
  */
 const Calendar = (function() {
     let currentYear;
@@ -10,6 +10,8 @@ const Calendar = (function() {
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
 
+    const DAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
     /**
      * Initialize the calendar with current date
      */
@@ -18,13 +20,11 @@ const Calendar = (function() {
         currentYear = today.getFullYear();
         currentMonth = today.getMonth();
         render();
+        renderMiniCalendar();
     }
 
     /**
      * Get the first day of the month (0 = Sunday, 6 = Saturday)
-     * @param {number} year
-     * @param {number} month
-     * @returns {number}
      */
     function getFirstDayOfMonth(year, month) {
         return new Date(year, month, 1).getDay();
@@ -32,9 +32,6 @@ const Calendar = (function() {
 
     /**
      * Get the number of days in a month
-     * @param {number} year
-     * @param {number} month
-     * @returns {number}
      */
     function getDaysInMonth(year, month) {
         return new Date(year, month + 1, 0).getDate();
@@ -42,10 +39,6 @@ const Calendar = (function() {
 
     /**
      * Format date as YYYY-MM-DD
-     * @param {number} year
-     * @param {number} month
-     * @param {number} day
-     * @returns {string}
      */
     function formatDate(year, month, day) {
         const m = String(month + 1).padStart(2, '0');
@@ -55,10 +48,6 @@ const Calendar = (function() {
 
     /**
      * Check if a date is today
-     * @param {number} year
-     * @param {number} month
-     * @param {number} day
-     * @returns {boolean}
      */
     function isToday(year, month, day) {
         const today = new Date();
@@ -70,26 +59,74 @@ const Calendar = (function() {
     }
 
     /**
-     * Render the calendar grid
+     * Format time for display (e.g., "1pm", "9am")
+     */
+    function formatTime(timeStr) {
+        if (!timeStr) return '';
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        const period = hours >= 12 ? 'pm' : 'am';
+        const hour12 = hours % 12 || 12;
+        return minutes === 0 ? `${hour12}${period}` : `${hour12}:${String(minutes).padStart(2, '0')}${period}`;
+    }
+
+    /**
+     * Render the main calendar
      */
     function render() {
-        const container = document.getElementById('calendarDays');
+        const headersContainer = document.getElementById('dayHeaders');
+        const daysContainer = document.getElementById('calendarDays');
         const monthDisplay = document.getElementById('currentMonth');
 
-        if (!container || !monthDisplay) return;
+        if (!headersContainer || !daysContainer || !monthDisplay) return;
 
         // Update month/year display
         monthDisplay.textContent = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
 
-        // Clear existing cells
-        container.innerHTML = '';
+        // Clear existing content
+        headersContainer.innerHTML = '';
+        daysContainer.innerHTML = '';
 
         const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
         const daysInMonth = getDaysInMonth(currentYear, currentMonth);
         const daysInPrevMonth = getDaysInMonth(currentYear, currentMonth - 1);
 
-        // Get events for this month
+        // Get events for display
         const events = Events.getEventsByMonth(currentYear, currentMonth);
+
+        // Calculate week dates for headers (first week of visible calendar)
+        const headerDates = [];
+        for (let i = 0; i < 7; i++) {
+            let dayNum;
+            let month = currentMonth;
+            let year = currentYear;
+
+            if (i < firstDay) {
+                // Previous month
+                dayNum = daysInPrevMonth - (firstDay - 1) + i;
+                month = currentMonth === 0 ? 11 : currentMonth - 1;
+                year = currentMonth === 0 ? currentYear - 1 : currentYear;
+            } else {
+                dayNum = i - firstDay + 1;
+            }
+            headerDates.push({ day: dayNum, month, year });
+        }
+
+        // Create day headers with day name and date
+        DAY_NAMES.forEach((name, idx) => {
+            const header = document.createElement('div');
+            header.className = 'day-header';
+
+            const dateInfo = headerDates[idx];
+            if (isToday(dateInfo.year, dateInfo.month, dateInfo.day)) {
+                header.classList.add('today');
+            }
+
+            header.innerHTML = `
+                <div class="day-name">${name}</div>
+                <div class="day-number">${dateInfo.day}</div>
+            `;
+            headersContainer.appendChild(header);
+        });
 
         // Create cells for previous month's trailing days
         for (let i = firstDay - 1; i >= 0; i--) {
@@ -97,16 +134,16 @@ const Calendar = (function() {
             const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
             const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
             const cell = createDayCell(prevYear, prevMonth, day, true);
-            container.appendChild(cell);
+            daysContainer.appendChild(cell);
         }
 
         // Create cells for current month's days
         for (let day = 1; day <= daysInMonth; day++) {
             const cell = createDayCell(currentYear, currentMonth, day, false, events);
-            container.appendChild(cell);
+            daysContainer.appendChild(cell);
         }
 
-        // Fill remaining cells to complete the grid (6 rows x 7 days = 42 cells)
+        // Fill remaining cells to complete the grid
         const totalCells = firstDay + daysInMonth;
         const remainingCells = Math.ceil(totalCells / 7) * 7 - totalCells;
 
@@ -114,18 +151,15 @@ const Calendar = (function() {
             const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
             const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
             const cell = createDayCell(nextYear, nextMonth, day, true);
-            container.appendChild(cell);
+            daysContainer.appendChild(cell);
         }
+
+        // Update mini calendar
+        renderMiniCalendar();
     }
 
     /**
      * Create a day cell element
-     * @param {number} year
-     * @param {number} month
-     * @param {number} day
-     * @param {boolean} isOtherMonth
-     * @param {Array} monthEvents
-     * @returns {HTMLElement}
      */
     function createDayCell(year, month, day, isOtherMonth, monthEvents = []) {
         const cell = document.createElement('div');
@@ -135,18 +169,8 @@ const Calendar = (function() {
             cell.classList.add('other-month');
         }
 
-        if (!isOtherMonth && isToday(year, month, day)) {
-            cell.classList.add('today');
-        }
-
         const dateStr = formatDate(year, month, day);
         cell.dataset.date = dateStr;
-
-        // Day number
-        const dayNumber = document.createElement('span');
-        dayNumber.className = 'day-number';
-        dayNumber.textContent = day;
-        cell.appendChild(dayNumber);
 
         // Events for this day
         if (!isOtherMonth) {
@@ -158,12 +182,20 @@ const Calendar = (function() {
                 const eventList = document.createElement('div');
                 eventList.className = 'event-list';
 
-                // Show up to 2 events, then "more" indicator
-                const maxVisible = 2;
+                // Show up to 3 events
+                const maxVisible = 3;
                 dayEvents.slice(0, maxVisible).forEach(event => {
                     const eventItem = document.createElement('div');
                     eventItem.className = 'event-item';
-                    eventItem.textContent = event.title;
+
+                    if (event.startTime) {
+                        eventItem.classList.add('timed');
+                        eventItem.innerHTML = `<span class="event-time">${formatTime(event.startTime)}</span> ${event.title}`;
+                    } else {
+                        eventItem.classList.add('all-day');
+                        eventItem.textContent = event.title;
+                    }
+
                     eventItem.dataset.eventId = event.id;
                     eventItem.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -192,6 +224,60 @@ const Calendar = (function() {
     }
 
     /**
+     * Render the mini calendar in sidebar
+     */
+    function renderMiniCalendar() {
+        const miniDays = document.getElementById('miniDays');
+        const miniMonth = document.getElementById('miniMonth');
+
+        if (!miniDays || !miniMonth) return;
+
+        miniMonth.textContent = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
+        miniDays.innerHTML = '';
+
+        const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
+        const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+        const daysInPrevMonth = getDaysInMonth(currentYear, currentMonth - 1);
+
+        // Previous month days
+        for (let i = firstDay - 1; i >= 0; i--) {
+            const day = daysInPrevMonth - i;
+            const dayEl = document.createElement('div');
+            dayEl.className = 'mini-day other-month';
+            dayEl.textContent = day;
+            miniDays.appendChild(dayEl);
+        }
+
+        // Current month days
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dayEl = document.createElement('div');
+            dayEl.className = 'mini-day';
+
+            if (isToday(currentYear, currentMonth, day)) {
+                dayEl.classList.add('today');
+            }
+
+            dayEl.textContent = day;
+            dayEl.addEventListener('click', () => {
+                const dateStr = formatDate(currentYear, currentMonth, day);
+                Modal.open('add', null, dateStr);
+            });
+            miniDays.appendChild(dayEl);
+        }
+
+        // Next month days
+        const totalCells = firstDay + daysInMonth;
+        const remainingCells = Math.ceil(totalCells / 7) * 7 - totalCells;
+
+        for (let day = 1; day <= remainingCells; day++) {
+            const dayEl = document.createElement('div');
+            dayEl.className = 'mini-day other-month';
+            dayEl.textContent = day;
+            miniDays.appendChild(dayEl);
+        }
+    }
+
+    /**
      * Navigate to previous month
      */
     function prevMonth() {
@@ -216,8 +302,17 @@ const Calendar = (function() {
     }
 
     /**
+     * Go to today
+     */
+    function goToToday() {
+        const today = new Date();
+        currentYear = today.getFullYear();
+        currentMonth = today.getMonth();
+        render();
+    }
+
+    /**
      * Get current year
-     * @returns {number}
      */
     function getCurrentYear() {
         return currentYear;
@@ -225,7 +320,6 @@ const Calendar = (function() {
 
     /**
      * Get current month
-     * @returns {number}
      */
     function getCurrentMonth() {
         return currentMonth;
@@ -236,6 +330,7 @@ const Calendar = (function() {
         render,
         prevMonth,
         nextMonth,
+        goToToday,
         getCurrentYear,
         getCurrentMonth,
         formatDate
